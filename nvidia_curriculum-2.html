@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assad's 52-Week CUDA → LLM → NVIDIA Curriculum</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #07070e; color: #ddd9d0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; }
+  #root { height: 100vh; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: #0a0a12; }
+  ::-webkit-scrollbar-thumb { background: #2a2a38; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a50; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- React + ReactDOM + Babel (CDN — no install needed) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<!-- localStorage bridge so progress persists between sessions -->
+<script>
+window.storage = {
+  get: async (key) => {
+    const v = localStorage.getItem('nvcurr_' + key);
+    return v !== null ? { value: v } : null;
+  },
+  set: async (key, value) => {
+    localStorage.setItem('nvcurr_' + key, value);
+    return { key, value };
+  },
+  delete: async (key) => {
+    localStorage.removeItem('nvcurr_' + key);
+    return { key, deleted: true };
+  }
+};
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+const PHASES = [
+  {id:1,name:"Math & Systems",mo:"Month 1–2",col:"#0F9E6A",wks:"1–8"},
+  {id:2,name:"CUDA C++ Core",mo:"Month 3–5",col:"#7B6CF6",wks:"9–20"},
+  {id:3,name:"Transformer Math",mo:"Month 6–7",col:"#2A8ECB",wks:"21–28"},
+  {id:4,name:"LLM Kernels",mo:"Month 8–10",col:"#E07C1A",wks:"29–38"},
+  {id:5,name:"LLM Systems",mo:"Month 10–11",col:"#D45040",wks:"39–46"},
+  {id:6,name:"NVIDIA Ready",mo:"Month 12",col:"#76b900",wks:"47–52"},
+];
+
+const W=[
+  {w:1,p:1,t:"Linear Algebra I",math:"Vectors, scalars, dot product, vector spaces, basis vectors",cpp:"C++ setup: pointers, raw arrays, stack vs heap, pointer arithmetic",llm:"What is an LLM? Tokens, weights, parameters — complete mental map",lab:"Setup RunPod + cloud terminal; compile and run first C++ program",ms:"Environment ready"},
+  {w:2,p:1,t:"Linear Algebra II",math:"Matrices, matrix multiply AB, transpose, inverse, rank, determinant",cpp:"C++ memory: malloc/free, new/delete, pointer arithmetic, segfaults",llm:"Tokenization deep dive: BPE algorithm step-by-step, tiktoken internals",lab:"Implement matrix multiply in C++; benchmark with std::chrono"},
+  {w:3,p:1,t:"Linear Algebra III",math:"Eigenvalues/SVD basics, L1/L2/Frobenius norms, orthogonal projections",cpp:"C++ structs, classes, operator overloading, function templates intro",llm:"Embedding matrix: each token is a row lookup; cosine similarity search",lab:"Implement cosine similarity + L2 norm; test on large random vectors"},
+  {w:4,p:1,t:"Calculus I",math:"Derivatives, partial derivatives, chain rule, product/quotient rules",cpp:"Function pointers, lambdas, std::function, higher-order functions",llm:"Loss functions: cross-entropy, MSE, perplexity — what they measure",lab:"Numerical gradient checker (finite differences) in C++ on toy MLP"},
+  {w:5,p:1,t:"Calculus II",math:"Gradients, Jacobians, directional derivatives, saddle points",cpp:"Smart pointers: unique_ptr, shared_ptr, weak_ptr; RAII pattern",llm:"Backpropagation: chain rule applied recursively layer-by-layer",lab:"Scalar autograd engine in C++ — Karpathy micrograd style",ms:"Autograd engine working"},
+  {w:6,p:1,t:"Probability & Stats",math:"Distributions, Bayes theorem, entropy H(p), KL divergence formula",cpp:"STL: vector, unordered_map, std::sort, transform; benchmark harness",llm:"Softmax, temperature scaling, top-k, top-p nucleus sampling",lab:"Implement softmax + sampling strategies; validate output distributions"},
+  {w:7,p:1,t:"Numerical Computing",math:"FP32/FP16/BF16 bit layouts, inf/nan, overflow, log-sum-exp trick",cpp:"Compiler flags -O2/-O3, SIMD intrinsics intro, perf-stat profiling",llm:"Why BF16 beats FP16 for LLM training: wider exponent range",lab:"Numerically stable softmax; measure FP32 vs FP16 accumulation error"},
+  {w:8,p:1,t:"GPU Architecture",math:"Parallel complexity, work-span model, Amdahl's law quantified",cpp:"pthreads basics: thread creation, mutex, race condition demonstration",llm:"Compute-bound vs memory-bound ops in transformers; roofline model",lab:"Measure GPU memory bandwidth via bandwidthTest; build roofline chart",ms:"Phase 1 complete"},
+  {w:9,p:2,t:"CUDA Hello World",math:"Thread index: idx = blockIdx.x × blockDim.x + threadIdx.x",cpp:"__global__ __device__ __host__; kernel launch <<<blocks,threads>>>",llm:"Every tensor operation maps to thousands of parallel GPU thread calls",lab:"Vector add kernel; verify with cudaMemcpy; time with cudaEvent",ms:"First CUDA kernel"},
+  {w:10,p:2,t:"CUDA Memory Types",math:"Bandwidth = bytes transferred / time; arithmetic intensity = FLOPs/bytes",cpp:"cudaMalloc/cudaFree/cudaMemcpy; global, shared, local, constant memory",llm:"Model weights live in GPU VRAM; activations allocated per layer",lab:"Benchmark global vs shared vs constant memory — build latency table"},
+  {w:11,p:2,t:"Synchronization",math:"Parallel reduction: O(log N) steps, O(N) total work",cpp:"__syncthreads(), atomicAdd(), __ballot_sync(), warp divergence cost",llm:"Sync prevents race conditions in parallel softmax denominator",lab:"Parallel reduction with shared memory; verify correctness on 1M elements"},
+  {w:12,p:2,t:"Memory Coalescing",math:"Cache line = 128 bytes; stride access wastes 32× memory bandwidth",cpp:"Warp coalescing rules; shared memory bank conflicts; padding trick",llm:"Tensor layout (NCHW vs NHWC, row-major) determines coalescing",lab:"Coalesced vs uncoalesced experiment: measure the 10× bandwidth gap"},
+  {w:13,p:2,t:"Tiled Matrix Multiply",math:"Tile reuse: each global element loaded TILE_SIZE fewer times",cpp:"__shared__ float tile[T][T]; correct __syncthreads() placement pairs",llm:"GEMM is ~90% of transformer FLOPs: QKV proj, FFN, output proj",lab:"Tiled GEMM; benchmark vs naive and cuBLAS; get within 2×",ms:"Tiled GEMM within 2× cuBLAS"},
+  {w:14,p:2,t:"CUDA Streams & Async",math:"Overlap model: effective_time = max(compute, transfer) vs their sum",cpp:"cudaStream_t; cudaMemcpyAsync; cudaEventRecord/Synchronize pattern",llm:"Prefetch next batch while GPU processes current — key in serving",lab:"Double-buffer pipeline: overlap host→device transfer with kernel"},
+  {w:15,p:2,t:"Warp Programming",math:"Warp = 32 threads; SIMT execution; thread divergence doubles latency",cpp:"__shfl_xor_sync(); __reduce_add_sync(); warp vote intrinsics",llm:"Warp-level reduction computes softmax denominator in ~5 instructions",lab:"Warp-level vs block-level reduction: measure latency difference"},
+  {w:16,p:2,t:"cuBLAS & cuDNN",math:"GEMM: C = α·A·B + β·C; row-major vs column-major convention",cpp:"cublasCreate; cublasSgemm; cublasGemmEx for mixed precision FP16",llm:"PyTorch dispatches every nn.Linear forward call to cuBLAS internally",lab:"cublasSgemm from C++; output must exactly match your tiled kernel"},
+  {w:17,p:2,t:"Nsight Profiling",math:"Occupancy = active warps / max warps; register file pressure",cpp:"nsys profile ./binary; ncu --metrics sm__throughput,l2_throughput",llm:"Is my attention kernel compute-bound or memory-bound? Measure it.",lab:"Profile tiled GEMM in Nsight Compute; identify and fix top 3 issues",ms:"Nsight profiling mastered"},
+  {w:18,p:2,t:"Tensor Cores & FP16",math:"Tensor Core: 16×16×16 mma in one clock; 8× vs CUDA cores FLOP/s",cpp:"half dtype; __half arithmetic; WMMA API: wmma::mma_sync()",llm:"Every LLaMA/GPT-4 GEMM uses Tensor Cores via cuBLAS TF32/FP16",lab:"FP16 GEMM with WMMA API; benchmark TFLOP/s vs FP32 CUDA cores"},
+  {w:19,p:2,t:"Multi-GPU Basics",math:"NVLink bandwidth 600 GB/s vs PCIe 64 GB/s; latency model",cpp:"cudaSetDevice(); cudaMemcpyPeer(); NCCL ncclAllReduce() pattern",llm:"Data parallelism: each GPU holds full model, AllReduce gradients",lab:"GPU-to-GPU bandwidth benchmark; basic NCCL AllReduce correctness"},
+  {w:20,p:2,t:"Production CUDA Code",math:"Error probability at scale: every CUDA call must be checked",cpp:"CUDA_CHECK macro; cuda-sanitizer; RAII wrappers for GPU resources",llm:"Production kernels (cuDNN, Flash-Attn) handle every edge case",lab:"Harden all 11 previous kernels with error checks + sanitizer run",ms:"Phase 2 complete"},
+  {w:21,p:3,t:"Self-Attention Math",math:"Attention(Q,K,V)=softmax(QKᵀ/√d_k)V — derive every single term",cpp:"Attention maps to: GEMM(Q,Kᵀ) → scale → softmax → GEMM(·,V)",llm:"Decoder-only (GPT): causal mask; Encoder (BERT): full attention",lab:"Attention in C++ CPU-only; validate exact match vs PyTorch output"},
+  {w:22,p:3,t:"Multi-Head Attention",math:"h heads × d_k dims each; concat all heads then project with W_O",cpp:"cublasSgemmBatched; cublasGemmStridedBatched for H heads in parallel",llm:"Each head attends to a different representational subspace",lab:"Multi-head attention C++/CUDA; verify all heads + final output"},
+  {w:23,p:3,t:"Positional Encoding",math:"Sinusoidal PE derivation; RoPE: rotate dim pairs by θᵢ=pos/10000^(2i/d)",cpp:"Vectorized RoPE kernel: complex-multiply pairs of hidden dimensions",llm:"RoPE in LLaMA/Mistral; ALiBi in BLOOM; NTK-RoPE for long context",lab:"CUDA RoPE kernel; validate vs HuggingFace apply_rotary_emb output"},
+  {w:24,p:3,t:"FFN & LayerNorm",math:"FFN: max(0,xW₁+b₁)W₂+b₂; LN: (x−μ)/σ·γ+β with stable variance",cpp:"Fused LayerNorm+GELU kernel: single pass, no extra memory allocation",llm:"Fused ops halve memory bandwidth vs two separate kernel launches",lab:"Fused LayerNorm CUDA kernel; profile vs unfused version in Nsight"},
+  {w:25,p:3,t:"Transformer Forward",math:"Causal mask: upper-triangle positions get −∞ before softmax",cpp:"Parallel log-softmax kernel; masked-fill with large negative value",llm:"Next-token prediction: logits over full vocabulary (50,257 tokens)",lab:"Full 1-layer GPT forward pass in CUDA C++; end-to-end correctness",ms:"Transformer forward pass"},
+  {w:26,p:3,t:"Backpropagation",math:"∂L/∂Q, ∂L/∂K, ∂L/∂V through softmax·V — full Jacobian derivation",cpp:"Gradient kernels; atomicAdd for accumulation; gradient checkpointing",llm:"Grad checkpointing: recompute activations backward — halves VRAM",lab:"Backward pass for softmax; verify gradients with finite differences"},
+  {w:27,p:3,t:"Optimizers",math:"Adam: mₜ=β₁m_{t−1}+(1−β₁)gₜ; vₜ=β₂v_{t−1}+(1−β₂)gₜ²",cpp:"Fused AdamW kernel: update param+m+v in one pass, no temp buffer",llm:"Fused AdamW saves 3× memory bandwidth vs three separate kernels",lab:"Fused AdamW CUDA kernel; benchmark vs naive 3-pass version"},
+  {w:28,p:3,t:"KV Cache Math",math:"KV size = 2·L·H·d_h·S·B·bytes — compute this for LLaMA-7B",cpp:"Static KV cache: pre-allocate max_seq slots; update pointer each step",llm:"KV cache enables O(1) per-step generation by reusing past K,V",lab:"Static KV cache in CUDA; generate 128 tokens in autoregressive loop",ms:"Phase 3 complete"},
+  {w:29,p:4,t:"Flash Attention — Theory",math:"Online softmax: track running max m and normalizer l across K,V blocks",cpp:"Tiling strategy: Q_i, K_j, V_j tiles in SRAM; fuse 3 ops into 1 kernel",llm:"Standard attn: O(N²) VRAM; Flash Attn: O(N) VRAM, same output",lab:"Annotate FA1 paper; implement online softmax numerics in C++"},
+  {w:30,p:4,t:"Flash Attention 1",math:"Merge partial (m,l,O) results across all K,V tile blocks correctly",cpp:"SRAM layout: shared[Q_BLK][D], shared[K_BLK][D], shared[V_BLK][D]",llm:"FA1 is the kernel used in GPT-4, LLaMA-1; study Dao et al. 2022",lab:"Full FA1 CUDA kernel; validate vs torch.scaled_dot_product_attention",ms:"Flash Attention 1 kernel"},
+  {w:31,p:4,t:"Flash Attention 2",math:"FA2: parallelise over Q rows (seq dim), not just batch and heads",cpp:"Thread block per Q-row; reduce non-matmul FLOPs; better occupancy",llm:"FA2 is in LLaMA-3, Mistral, GPT-4o; typically 2× faster than FA1",lab:"Extend FA1 → FA2 parallelism; measure tokens/sec improvement"},
+  {w:32,p:4,t:"Softmax & LayerNorm Perf",math:"Welford algorithm: numerically stable online mean + variance in one pass",cpp:"Warp-level max then sum reduction; single-pass normalizer pattern",llm:"These run millions of times per LLM forward pass — must be fastest",lab:"Optimal softmax kernel; benchmark vs PyTorch fused implementation"},
+  {w:33,p:4,t:"GEMM for LLMs",math:"LLaMA-7B GEMM shapes: 4096×4096, 4096×11008; count FLOPs per shape",cpp:"cuBLAS heuristics; persistent kernel pattern; split-K for skinny GEMMs",llm:"Q/K/V proj, FFN gate, output proj — all different aspect ratio shapes",lab:"Profile LLaMA-7B GEMMs in Nsight; tune tile size per shape",ms:"Match cuBLAS on LLaMA GEMMs"},
+  {w:34,p:4,t:"Triton Kernels",math:"Autotuning: grid search over BLOCK_M, BLOCK_N, BLOCK_K meta-params",cpp:"@triton.jit, tl.load/store/dot; Triton compiles Python → PTX directly",llm:"vLLM, SGLang, unsloth all ship Triton kernels in production today",lab:"Rewrite Flash Attention in Triton; compare throughput vs CUDA C++"},
+  {w:35,p:4,t:"Paged Attention",math:"Block table: logical_block_num → physical_block_num mapping",cpp:"Indirect memory: KV loaded via block_table[seq_id][block_idx] pointer",llm:"vLLM paged KV cache enables 10× more concurrent requests served",lab:"Toy paged KV cache in CUDA; serve 4 concurrent variable-length seqs"},
+  {w:36,p:4,t:"Quantization Kernels",math:"INT8 symmetric: q=round(x/scale), scale=max_abs/127; per-token scaling",cpp:"cublasGemmEx CUDA_R_8I; W4A16 dequant inside kernel before accumulation",llm:"GPTQ, AWQ, bitsandbytes all implement variants of this core pattern",lab:"W4A16 GEMM kernel (4-bit weight, FP16 activation); verify output",ms:"INT8 / W4A16 GEMM kernel"},
+  {w:37,p:4,t:"Speculative Decoding",math:"Acceptance prob: α=min(1, p_target(xₜ)/p_draft(xₜ)) per draft token",cpp:"Parallel verification: N draft tokens verified in 1 target forward pass",llm:"Medusa, Eagle-2: 2–4× speedup on greedy and beam search decoding",lab:"Speculative verification kernel; simulate acceptance rate sampling"},
+  {w:38,p:4,t:"Continuous Batching",math:"Sequence packing: bin-packing to maximise GPU memory utilisation",cpp:"Jagged batch GEMM; variable-length sequence handling per request",llm:"vLLM iteration-level scheduling; no wasted cycles on padded batches",lab:"Basic continuous batching scheduler in C++; measure throughput gain",ms:"Phase 4 complete"},
+  {w:39,p:5,t:"Tensor Parallelism",math:"Column-parallel: split weight columns across GPUs + AllReduce result",cpp:"NCCL ncclAllReduce after row-parallel layer; overlap with computation",llm:"Megatron-LM TP: attention heads split across N GPUs per node",lab:"Tensor-parallel linear layer: 2-GPU RunPod + NCCL; verify output"},
+  {w:40,p:5,t:"Pipeline Parallelism",math:"Bubble ratio=(p−1)/m; 1F1B schedule reduces to (p−1)/(m+p−1)",cpp:"CUDA streams for pipeline overlap; cudaStreamWaitEvent chaining",llm:"GPipe vs PipeDream vs Interleaved 1F1B — NVIDIA uses 1F1B",lab:"Simulate 4-stage pipeline with CUDA streams; measure bubble ratio"},
+  {w:41,p:5,t:"TensorRT-LLM",math:"Fusion graph: TRT combines LayerNorm+QKV+Attention into one kernel",cpp:"TRT custom plugin C++ API; in-flight batching engine build script",llm:"TRT-LLM powers NVIDIA NIM; deployed at Microsoft, Meta, Google Cloud",lab:"Run TRT-LLM LLaMA-7B on RunPod; profile throughput with Nsight",ms:"TRT-LLM running"},
+  {w:42,p:5,t:"Mixture of Experts",math:"Top-k routing: softmax over E experts + auxiliary load-balance loss",cpp:"Expert dispatch: group tokens by expert → grouped GEMM per expert",llm:"Mixtral-8×7B MoE; only top-2 of 8 experts active per token forward",lab:"Top-k routing kernel + grouped GEMM for 8 experts; benchmark"},
+  {w:43,p:5,t:"Long Context Attention",math:"Ring attention: sequence sharded across GPUs; exchange K,V in ring",cpp:"Distributed FlashAttention: NCCL send/recv between adjacent GPU ranks",llm:"LLaMA-3.1 128K, Claude 200K context use ring/sequence parallelism",lab:"Sliding window attention CUDA kernel; test on 32K token sequence"},
+  {w:44,p:5,t:"Training at Scale",math:"Loss scaling: loss×scale prevents FP16 underflow in backward pass",cpp:"Gradient AllReduce with NCCL; ZeRO-1/2/3 memory partitioning",llm:"DeepSpeed ZeRO-3: partitions optimizer state+gradients+params",lab:"Profile distributed training: measure compute vs communication ratio"},
+  {w:45,p:5,t:"Inference Serving",math:"Little's Law: throughput = concurrency / mean_latency",cpp:"CUDA Graphs: cudaStreamBeginCapture + cudaGraphLaunch; zero CPU overhead",llm:"Triton Inference Server + NVIDIA NIM; CUDA graphs for token generation",lab:"Deploy LLaMA on Triton Server with CUDA graph capture; benchmark RPS"},
+  {w:46,p:5,t:"FP8 & H100",math:"FP8 E4M3: 4-bit exponent, 3-bit mantissa; delayed scaling strategy",cpp:"cuBLASLt FP8 GEMM API; H100 sm_90 mma.sync for FP8 Tensor Cores",llm:"FP8 training in LLaMA-3 405B, GPT-4o; ~2× throughput over BF16",lab:"FP8 linear layer on H100 RunPod pod; compare throughput vs BF16",ms:"Phase 5 complete"},
+  {w:47,p:6,t:"NeMo & Megatron-LM",math:"Sequence parallelism: LN input sharded; AllGather + AllReduce pattern",cpp:"NeMo plugin API; Megatron core TP+PP layers; checkpoint format",llm:"NeMo trains Nemotron-4, LLaMA-3 fine-tunes at NVIDIA production scale",lab:"Train 124M GPT-2 with NeMo on RunPod 8-GPU pod; log loss curve",ms:"Trained with NeMo"},
+  {w:48,p:6,t:"Paper Implementation",math:"Grouped-Query Attention (GQA): G groups of heads share K,V projections",cpp:"GQA CUDA kernel: H_q query heads, H_kv < H_q key/value heads",llm:"GQA used in LLaMA-2/3, Mistral-7B, Gemma; reduces KV cache by 8×",lab:"GQA kernel from scratch; publish as open-source GitHub repository",ms:"GQA kernel published"},
+  {w:49,p:6,t:"LLM System Design",math:"Capacity: FLOP/token × req/s = TFLOP/s needed → GPU count formula",cpp:"Roofline + memory bandwidth calculator; performance model in C++",llm:"Design: serve LLaMA-70B at 100 req/s — hardware, batching, routing",lab:"Write system design doc: 70B inference cluster with full cost breakdown",ms:"System design doc"},
+  {w:50,p:6,t:"Interview Prep I",math:"Attention FLOP counting: 4·N·d + 2·N²·h per layer — memorise",cpp:"Mock CUDA interview Qs: reduce kernel, coalescing fix, occupancy tuning",llm:"Explain Flash Attention 2 verbally from memory — no notes allowed",lab:"Mock technical screen: implement reduction kernel on virtual whiteboard"},
+  {w:51,p:6,t:"Interview Prep II",math:"Roofline derivation live; arithmetic intensity of your 10 key kernels",cpp:"System design: TensorRT inference cluster for 10,000 concurrent users",llm:"LLM training vs inference tradeoffs; quantization quality choices",lab:"Full 90-min mock system design interview; record and self-review"},
+  {w:52,p:6,t:"Capstone & Apply",math:"Write arithmetic intensity analysis blog post for your inference engine",cpp:"Capstone: mini LLM inference engine in CUDA C++ — public GitHub repo",llm:"Open-source PR to vLLM, Flash-Attention-3, or TensorRT-LLM repo",lab:"Submit NVIDIA application with GitHub portfolio + technical blog post",ms:"NVIDIA application submitted"},
+];
+
+// ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
+function buildPrompt(week, phase, tabId) {
+  const slug = `week-${String(week.w).padStart(2,"0")}-${week.t.toLowerCase().replace(/[^a-z0-9]+/g,"-")}`;
+  const ctx =
+`I am Assad — a senior software engineer with 17+ years of Java/Spring Boot and cloud-native systems experience. I am on a focused 52-week self-study program to master CUDA C++ and LLM systems engineering with a single goal: join NVIDIA as an engineer. I have strong systems intuition but I am new to GPU programming.
+
+My context:
+• Week ${week.w} of 52  |  Phase ${phase.id}: ${phase.name}  |  ${phase.mo}
+• This week's topic: ${week.t}${week.ms?`\n• Milestone to hit: ${week.ms}`:""}
+
+This week covers four tracks:
+• Mathematics  : ${week.math}
+• CUDA / C++  : ${week.cpp}
+• LLM Theory  : ${week.llm}
+• Lab Exercise : ${week.lab}`;
+
+  if (tabId === "ov") return `${ctx}
+
+════════════════════════════════════════════════════════
+WEEK ${week.w} — COMPLETE OVERVIEW & STUDY PLAN
+════════════════════════════════════════════════════════
+
+Please give me a comprehensive overview of this week covering all of the following:
+
+1. LEARNING OBJECTIVES
+   List 4–5 specific, testable objectives for Week ${week.w} — "${week.t}".
+   Each must be concrete enough that I can verify I achieved it by end of week.
+   Not generic — tied directly to this topic.
+
+2. WHY THIS MATTERS FOR NVIDIA
+   How does mastering this week's content make me a stronger NVIDIA candidate?
+   Which specific NVIDIA team works on this (cuDNN, TensorRT, NeMo, NCCL, NIM)?
+   What would a NVIDIA engineer say about a candidate who deeply knows this topic?
+
+3. PREREQUISITE SELF-CHECK
+   Give me 3 specific questions I should be able to answer before starting.
+   Include the correct answers so I can check myself right now.
+   If I cannot answer them, tell me exactly what to review first.
+
+4. DAY-BY-DAY STUDY PLAN (Monday – Friday)
+   Break this week into 5 days with concrete tasks per day.
+   Not "study the math" — be specific: "derive formula X, implement Y function, benchmark Z."
+   Include time estimates for each task.
+
+5. GITHUB DELIVERABLE
+   Exact folder name: ${slug}/
+   List every file I will commit, with a one-line description of each.
+   Write the exact git commit message.
+   What should someone see when they clone my repo and look at this week's folder?
+
+6. SUCCESS CRITERIA
+   How do I know I truly understood this week — not just "my code ran."
+   Give me 3 questions a NVIDIA interviewer would ask about this exact topic.
+   Show what a strong answer looks like for each.${week.ms?`
+
+7. MILESTONE VALIDATION — "${week.ms}"
+   What does hitting this milestone actually mean?
+   What specific output or measurement proves I genuinely achieved it?
+   How do I document it for my GitHub portfolio?`:""}
+
+════════════════════════════════════════════════════════
+📁 SAVE YOUR FULL RESPONSE AS A MARKDOWN FILE
+════════════════════════════════════════════════════════
+
+After completing your full response above, create a downloadable markdown file
+containing your ENTIRE response, fully formatted.
+
+Filename: ${slug}-overview.md
+
+The file must follow this exact structure:
+# Week ${week.w}: ${week.t} — Overview & Study Plan
+> Phase ${phase.id}: ${phase.name} | Assad's NVIDIA Curriculum | Week ${week.w} of 52${week.ms ? ` | Milestone: ${week.ms}` : ""}
+
+[Your complete response here with the following formatting rules:]
+• ## for each numbered section  (e.g. ## 1. Learning Objectives)
+• ### for subsections within a section
+• All code wrapped in proper fences: \`\`\`bash, \`\`\`cpp, \`\`\`python
+• All tables in markdown table format
+• All bullet lists preserved exactly
+
+---
+*Assad's 52-Week NVIDIA Curriculum · Week ${week.w}: ${week.t} · Phase ${phase.id}: ${phase.name}*
+*Saved: overview | File: ${slug}-overview.md*
+
+I will store this file at: nvidia-curriculum/${slug}/${slug}-overview.md`;
+
+  if (tabId === "math") return `${ctx}
+
+════════════════════════════════════════════════════════
+WEEK ${week.w} — MATHEMATICS: ${week.math}
+════════════════════════════════════════════════════════
+
+Teach me this mathematical topic completely — from intuition to GPU application.
+
+1. INTUITION BEFORE SYMBOLS
+   Explain the core idea using a physical or visual analogy — no equations yet.
+   I should be able to picture it and explain it to a friend before seeing any math.
+
+2. FORMAL DEFINITION — BUILD IT STEP BY STEP
+   Introduce the mathematics precisely.
+   Define every symbol on first use.
+   Build from the analogy above to the full formalism — do not skip steps.
+
+3. KEY FORMULAS — DERIVE EVERY ONE
+   For each important formula this week:
+   • State it clearly with all variables defined
+   • Derive it step by step — every algebraic move shown
+   • Explain what each term physically represents
+   • State dimensions/units
+
+4. WORKED EXAMPLE — SMALL NUMBERS FIRST
+   Walk me through a complete numerical example using small values
+   (e.g. 2×2 matrices, N=4 elements) where I can verify every step by hand.
+   Show every single arithmetic calculation — no "it follows that…"
+
+5. WORKED EXAMPLE — GPU SCALE
+   Scale the same example to realistic LLM dimensions
+   (e.g. 4096×4096 for LLaMA-7B, or batch=32, seq=2048, d=512 for attention).
+   Show what the numbers look like and what changes at scale.
+
+6. CONNECTION TO CUDA KERNEL DESIGN
+   How does this mathematics directly influence how I write the CUDA kernel?
+   What tiling strategy does it suggest?
+   What memory access pattern falls out of it?
+
+7. PRACTICE PROBLEMS WITH FULL SOLUTIONS
+   Give me 3 problems of increasing difficulty on this topic.
+   Provide complete worked solutions.
+   These should match the difficulty of a NVIDIA technical interview whiteboard problem.
+
+════════════════════════════════════════════════════════
+📁 SAVE YOUR FULL RESPONSE AS A MARKDOWN FILE
+════════════════════════════════════════════════════════
+
+After completing your full response above, create a downloadable markdown file
+containing your ENTIRE response, fully formatted.
+
+Filename: ${slug}-mathematics.md
+
+The file must follow this exact structure:
+# Week ${week.w}: ${week.t} — Mathematics
+> Phase ${phase.id}: ${phase.name} | Assad's NVIDIA Curriculum | Week ${week.w} of 52
+> Topic: ${week.math}
+
+[Your complete response here with the following formatting rules:]
+• ## for each numbered section  (e.g. ## 1. Intuition Before Symbols)
+• ### for subsections within a section
+• All formulas in a code block or blockquote so they render clearly
+• All worked examples with every step numbered and shown
+• All code wrapped in proper fences: \`\`\`cpp, \`\`\`python
+• Practice problems with clearly separated Problem / Solution sections
+
+---
+*Assad's 52-Week NVIDIA Curriculum · Week ${week.w}: ${week.t} · Phase ${phase.id}: ${phase.name}*
+*Saved: mathematics | File: ${slug}-mathematics.md*
+
+I will store this file at: nvidia-curriculum/${slug}/${slug}-mathematics.md`;
+
+  if (tabId === "cuda") return `${ctx}
+
+════════════════════════════════════════════════════════
+WEEK ${week.w} — CUDA / C++: ${week.cpp}
+════════════════════════════════════════════════════════
+
+Give me the complete CUDA C++ implementation guide for this week.
+
+1. GPU HARDWARE MENTAL MODEL
+   Before any code — explain the GPU hardware involved:
+   Which part of the SM architecture is relevant here?
+   How do warps, thread blocks, shared memory, registers, or the memory hierarchy play a role?
+   Describe an ASCII diagram or one I can sketch on paper.
+
+2. COMPLETE WORKING CUDA C++ PROGRAM
+   Write a full, compilable CUDA C++ program demonstrating this week's concept.
+
+   Hard requirements:
+   • Every non-obvious line has an inline comment explaining WHY (not just what)
+   • Must include: kernel definition, host code, cudaMalloc/cudaFree, cudaMemcpy,
+     kernel launch with correct grid/block config, CUDA error checking on every call,
+     cudaEvent timing, correctness verification, and printed results
+   • Length: 40–70 lines — clean and readable
+   • Must compile with: nvcc -std=c++17 -O2 -o output program.cu
+
+3. COMPILE AND RUN — EXACT TERMINAL SESSION
+   Show me the exact nvcc command with every flag explained.
+   Then show the exact terminal output when the program is correct — character for character.
+
+4. EXECUTION WALKTHROUGH — LINE BY LINE
+   Walk through the program as if tracing it in a debugger.
+   For each major section: what runs on CPU, what is dispatched to GPU,
+   how many threads are active, what memory is being accessed and from which memory tier.
+
+5. PERFORMANCE ANALYSIS
+   • Arithmetic intensity: FLOPs ÷ bytes accessed
+   • Theoretical peak on RTX 3090: compute-bound or memory-bound? How do you know?
+   • Achieved vs theoretical bandwidth or FLOP/s — what should I measure?
+   • The single Nsight Compute metric I should look at first
+
+6. THE 3 MOST COMMON BUGS ON THIS TOPIC
+   For each: describe exactly what goes wrong, show the error message or wrong output,
+   give the exact fix. These must be specific to "${week.cpp}" — not generic CUDA bugs.
+
+7. EXTENSION CHALLENGE
+   After the main lab works, what is the harder version that a NVIDIA engineer
+   would consider "the real test of understanding"?
+   Describe it — but do not solve it. Let me figure it out.
+
+════════════════════════════════════════════════════════
+📁 SAVE YOUR FULL RESPONSE AS A MARKDOWN FILE
+════════════════════════════════════════════════════════
+
+After completing your full response above, create a downloadable markdown file
+containing your ENTIRE response, fully formatted.
+
+Filename: ${slug}-cuda-cpp.md
+
+The file must follow this exact structure:
+# Week ${week.w}: ${week.t} — CUDA / C++
+> Phase ${phase.id}: ${phase.name} | Assad's NVIDIA Curriculum | Week ${week.w} of 52
+> Topic: ${week.cpp}
+
+[Your complete response here with the following formatting rules:]
+• ## for each numbered section  (e.g. ## 1. GPU Hardware Mental Model)
+• ### for subsections within a section
+• The complete CUDA C++ program in a single \`\`\`cpp code block with ALL comments preserved
+• Compile command in a \`\`\`bash block
+• Expected terminal output in a \`\`\`text block
+• Each bug description clearly separated with ### Bug 1, ### Bug 2, ### Bug 3
+• ASCII diagrams preserved exactly using a \`\`\`text block
+
+---
+*Assad's 52-Week NVIDIA Curriculum · Week ${week.w}: ${week.t} · Phase ${phase.id}: ${phase.name}*
+*Saved: cuda-cpp | File: ${slug}-cuda-cpp.md*
+
+I will store this file at: nvidia-curriculum/${slug}/${slug}-cuda-cpp.md`;
+
+  if (tabId === "llm") return `${ctx}
+
+════════════════════════════════════════════════════════
+WEEK ${week.w} — LLM THEORY: ${week.llm}
+════════════════════════════════════════════════════════
+
+Show me exactly how this week's GPU concept lives inside real LLM production systems.
+
+1. THE BRIDGE — GPU CONCEPT → LLM INTERNALS
+   Explain precisely how "${week.llm}" appears inside large language models.
+   Be concrete: not "it is used in attention" but exactly when, how many times, and why.
+
+2. PRODUCTION CODE REFERENCE — BE SPECIFIC
+   Name the exact open-source location where this technique is implemented today:
+   • Repository name + GitHub URL
+   • Exact file path (e.g. csrc/attention/flash_attn_interface.cpp)
+   • Function or class name and approximately what lines
+   • What I would search for to find it (grep pattern or function name)
+   Choose from: PyTorch, vLLM, Flash-Attention-2/3, Megatron-LM, TensorRT-LLM, HuggingFace Transformers, DeepSpeed, llama.cpp.
+
+3. WHICH NVIDIA TEAM OWNS THIS
+   Which specific team at NVIDIA works on this technology?
+   What does their day-to-day work on this look like?
+   How does saying "I implemented this from scratch" land in a NVIDIA interview?
+
+4. PAPERS TO READ THIS WEEK
+   1–2 research papers directly related to this topic:
+   • Full title, all authors, year, arXiv ID
+   • Which specific section and equation number to study
+   • The single most important insight to extract
+
+5. NVIDIA INTERVIEW SIMULATION
+   Write a realistic technical question a NVIDIA engineer would ask about this topic.
+   Then write the answer I should be able to give after completing this week.
+
+6. THE 60-SECOND EXPLANATION
+   Give me a memorable mental model or analogy for this concept that takes under 60
+   seconds to say out loud, requires no jargon, and shows deep understanding.
+   This is what I say when a NVIDIA interviewer asks "explain X to me."
+
+════════════════════════════════════════════════════════
+📁 SAVE YOUR FULL RESPONSE AS A MARKDOWN FILE
+════════════════════════════════════════════════════════
+
+After completing your full response above, create a downloadable markdown file
+containing your ENTIRE response, fully formatted.
+
+Filename: ${slug}-llm-theory.md
+
+The file must follow this exact structure:
+# Week ${week.w}: ${week.t} — LLM Theory
+> Phase ${phase.id}: ${phase.name} | Assad's NVIDIA Curriculum | Week ${week.w} of 52
+> Topic: ${week.llm}
+
+[Your complete response here with the following formatting rules:]
+• ## for each numbered section  (e.g. ## 1. The Bridge)
+• ### for subsections within a section
+• Production code references formatted as: \`repo/path/to/file.cpp\` (inline code)
+• Paper citations formatted as a blockquote with title, authors, year, arXiv link
+• Interview Q&A formatted with **Q:** and **A:** prefixes
+• The 60-second explanation in a clearly marked > blockquote
+
+---
+*Assad's 52-Week NVIDIA Curriculum · Week ${week.w}: ${week.t} · Phase ${phase.id}: ${phase.name}*
+*Saved: llm-theory | File: ${slug}-llm-theory.md*
+
+I will store this file at: nvidia-curriculum/${slug}/${slug}-llm-theory.md`;
+
+  if (tabId === "lab") return `${ctx}
+
+════════════════════════════════════════════════════════
+WEEK ${week.w} — LAB SETUP & EXERCISES: ${week.lab}
+════════════════════════════════════════════════════════
+
+Give me the complete lab guide — from zero setup to committed GitHub code.${week.ms?`\nThis week's milestone to validate: "${week.ms}"`:""}
+
+1. ENVIRONMENT SETUP — EVERY EXACT COMMAND
+   • RunPod instance recommendation: GPU type, base Docker image (with full image tag), why
+   • Every installation command in order:
+     apt-get, pip install, build commands — with exact package versions
+   • Any CUDA toolkit, cuDNN, or NCCL configuration
+   • Verification commands to confirm the environment is ready
+     before writing a single line of code
+
+2. BEGINNER EXERCISE — Must complete before advancing
+   Goal: [state the specific, concrete outcome]
+
+   Step-by-step instructions — assume I know nothing beyond this week's reading:
+   • Every step includes the exact code to write or command to run
+   • Show what I should see after each step (so I know I am on track)
+   • Tell me what to do if I see something unexpected
+   Target time: 1–2 hours
+
+3. INTERMEDIATE EXERCISE — After beginner is working
+   Goal: [a meaningful extension requiring deeper understanding]
+
+   Steps with code. Include a specific, measurable performance target:
+   e.g. "your kernel should reach within 3× of cuBLAS"
+   or "reduction time should be under 0.5ms for N=1M on RTX 3090"
+
+4. ADVANCED CHALLENGE — Stretch goal
+   Goal: [what separates a good engineer from a great one — NVIDIA level]
+
+   Give me guided hints, not the full solution.
+   The challenge should require reading a paper, understanding a hardware constraint,
+   or optimizing beyond the obvious approach.
+
+5. VALIDATION — HOW TO PROVE CORRECTNESS
+   • Exact Python/PyTorch command to generate the reference output
+   • The comparison command with specific tolerances
+   • What tolerance is acceptable and why
+   • The Nsight Compute command and metric that proves my kernel is efficient
+
+6. GITHUB COMMIT — EXACTLY WHAT TO PUSH
+   Folder: ${slug}/
+   • Every file with a one-line description
+   • README.md outline for this folder
+   • Exact git commit message
+   • What a NVIDIA recruiter sees when they open this week's PR${week.ms?`
+
+7. MILESTONE SIGN-OFF — "${week.ms}"
+   What is the single most important output, benchmark number, or screenshot
+   that definitively proves I hit this milestone?
+   How do I document it in my GitHub README so it is immediately visible?`:""}
+
+════════════════════════════════════════════════════════
+📁 SAVE YOUR FULL RESPONSE AS A MARKDOWN FILE
+════════════════════════════════════════════════════════
+
+After completing your full response above, create a downloadable markdown file
+containing your ENTIRE response, fully formatted.
+
+Filename: ${slug}-lab-setup.md
+
+The file must follow this exact structure:
+# Week ${week.w}: ${week.t} — Lab Setup & Exercises
+> Phase ${phase.id}: ${phase.name} | Assad's NVIDIA Curriculum | Week ${week.w} of 52${week.ms ? ` | Milestone: ${week.ms}` : ""}
+> Lab: ${week.lab}
+
+[Your complete response here with the following formatting rules:]
+• ## for each numbered section  (e.g. ## 1. Environment Setup)
+• ### for subsections  (e.g. ### Step 1 — Install CUDA toolkit)
+• Every shell command in its own \`\`\`bash block — never inline
+• Every code snippet in a \`\`\`cpp or \`\`\`python block with the language specified
+• Expected terminal output in a \`\`\`text block immediately after each command
+• The three exercise levels as ### 🟢 Beginner, ### 🔵 Intermediate, ### 🟠 Advanced
+• Git commit message in a \`\`\`bash block
+• Validation commands each in their own \`\`\`bash block${week.ms ? `
+• Milestone sign-off in a clearly marked ## ✅ Milestone: ${week.ms} section` : ""}
+
+---
+*Assad's 52-Week NVIDIA Curriculum · Week ${week.w}: ${week.t} · Phase ${phase.id}: ${phase.name}*
+*Saved: lab-setup | File: ${slug}-lab-setup.md*
+
+I will store this file at: nvidia-curriculum/${slug}/${slug}-lab-setup.md`;
+
+  return "";
+}
+
+// ─── PROGRESS HOOK ────────────────────────────────────────────────────────────
+function useProgress() {
+  const [done, setDone] = useState(new Set());
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get("nv_done");
+        if (r) setDone(new Set(JSON.parse(r.value)));
+      } catch(e) {}
+    })();
+  }, []);
+  const markDone = useCallback(async (w) => {
+    setDone(prev => {
+      const n = new Set([...prev, w]);
+      window.storage.set("nv_done", JSON.stringify([...n])).catch(()=>{});
+      return n;
+    });
+  }, []);
+  return { done, markDone };
+}
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const C = { bg:"#07070e", sidebar:"#05050b", border:"#16161e", border2:"#20202c", muted:"#52525a" };
+
+const TABS = [
+  {id:"ov",   icon:"📋", label:"Overview",    hint:"Study plan · objectives · success criteria"},
+  {id:"math", icon:"📐", label:"Mathematics", hint:"Derivations · worked examples · practice problems"},
+  {id:"cuda", icon:"⚡", label:"CUDA / C++",  hint:"Full working code · profiling · common bugs"},
+  {id:"llm",  icon:"🧠", label:"LLM Theory",  hint:"Production systems · papers · interview Q&A"},
+  {id:"lab",  icon:"🔬", label:"Lab Setup",   hint:"Environment · 3 exercise levels · GitHub commit"},
+];
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function Sidebar({ selW, done, onSelect, expanded, setExpanded }) {
+  return (
+    <div style={{width:252,minWidth:252,background:C.sidebar,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:9,fontWeight:800,letterSpacing:".18em",color:"#76b900",marginBottom:4,fontFamily:"monospace"}}>▲ NVIDIA TARGET CURRICULUM</div>
+        <div style={{fontSize:13,fontWeight:700,color:"#f0ede6"}}>Assad's 52-Week Road</div>
+        <div style={{marginTop:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.muted,marginBottom:5}}>
+            <span>{done.size} / 52 weeks done</span>
+            <span style={{color:"#76b900",fontWeight:700}}>{Math.round(done.size/52*100)}%</span>
+          </div>
+          <div style={{height:3,background:C.border2,borderRadius:99}}>
+            <div style={{height:"100%",width:`${done.size/52*100}%`,background:"linear-gradient(90deg,#76b900,#a8e000)",borderRadius:99,transition:"width .5s"}}/>
+          </div>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto"}}>
+        {PHASES.map(ph => {
+          const phW = W.filter(w=>w.p===ph.id);
+          const isExp = !!expanded[ph.id];
+          const phDone = phW.filter(w=>done.has(w.w)).length;
+          return (
+            <div key={ph.id}>
+              <div onClick={()=>setExpanded(e=>({...e,[ph.id]:!isExp}))}
+                style={{padding:"8px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${C.border}`,userSelect:"none"}}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:ph.col,flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#b0ada4",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{ph.name}</div>
+                  <div style={{fontSize:9,color:"#3a3a40"}}>{ph.mo} · {phDone}/{phW.length} done</div>
+                </div>
+                <div style={{fontSize:9,color:C.muted}}>{isExp?"▼":"▶"}</div>
+              </div>
+              {isExp && phW.map(w => {
+                const isSel = selW?.w === w.w;
+                return (
+                  <div key={w.w} onClick={()=>onSelect(w)}
+                    style={{padding:"6px 12px 6px 24px",cursor:"pointer",background:isSel?ph.col+"18":"transparent",borderLeft:`2px solid ${isSel?ph.col:"transparent"}`,display:"flex",alignItems:"flex-start",gap:6}}>
+                    <div style={{marginTop:2,flexShrink:0,width:10}}>
+                      {done.has(w.w)?<span style={{color:"#76b900",fontSize:9}}>✓</span>
+                        :w.ms?<span style={{color:ph.col,fontSize:9}}>★</span>
+                        :<span style={{color:"#2a2a30",fontSize:9}}>·</span>}
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:isSel?ph.col:C.muted,fontWeight:600,fontFamily:"monospace"}}>W{w.w}</div>
+                      <div style={{fontSize:11,color:isSel?"#f0ede6":"#777",fontWeight:isSel?600:400,lineHeight:1.35}}>{w.t}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── WELCOME ──────────────────────────────────────────────────────────────────
+function Welcome() {
+  return (
+    <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:20,padding:40,background:C.bg}}>
+      <div style={{fontSize:52,lineHeight:1}}>▲</div>
+      <div style={{fontSize:20,fontWeight:700,color:"#f0ede6"}}>Select a week to get your prompt</div>
+      <div style={{fontSize:13,color:C.muted,textAlign:"center",maxWidth:420,lineHeight:1.8}}>
+        Click any week in the sidebar, choose a tab, copy the prompt, then paste it into a new Claude.ai chat to get your complete, detailed learning materials instantly.
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:460,width:"100%"}}>
+        {TABS.map(t=>(
+          <div key={t.id} style={{background:"#0c0c14",border:`1px solid ${C.border2}`,borderRadius:9,padding:"11px 14px"}}>
+            <div style={{fontSize:13,marginBottom:4}}>{t.icon} <span style={{fontWeight:700,color:"#c8c4ba",fontSize:12}}>{t.label}</span></div>
+            <div style={{fontSize:11,color:C.muted,lineHeight:1.55}}>{t.hint}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:12,color:"#76b900",fontStyle:"italic",marginTop:4}}>
+        "Suffering builds character." — Jensen Huang
+      </div>
+    </div>
+  );
+}
+
+// ─── PROMPT PANEL ─────────────────────────────────────────────────────────────
+function PromptPanel({ week, phase, tabObj, isDone, onMarkDone }) {
+  const [copied, setCopied] = useState(false);
+  const prompt = buildPrompt(week, phase, tabObj.id);
+
+  function copy() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(prompt).then(()=>{
+        setCopied(true);
+        setTimeout(()=>setCopied(false), 2500);
+      });
+    } else {
+      // Fallback for browsers without clipboard API
+      const ta = document.createElement("textarea");
+      ta.value = prompt;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(()=>setCopied(false), 2500);
+    }
+  }
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* Action bar */}
+      <div style={{padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:"#09090f",display:"flex",alignItems:"center",gap:12,flexShrink:0,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontSize:10,color:C.muted,marginBottom:1}}>Copy → paste into a new Claude.ai chat</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#f0ede6"}}>{tabObj.icon} {tabObj.label} prompt — W{week.w}: {week.t}</div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          {!isDone
+            ?<button onClick={onMarkDone} style={{padding:"6px 13px",background:"transparent",border:`1px solid #76b90055`,borderRadius:6,color:"#76b900",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Mark Done</button>
+            :<span style={{fontSize:11,color:"#76b900",fontWeight:700}}>✓ Week complete</span>
+          }
+          <button onClick={copy} style={{padding:"9px 22px",background:copied?"#3d7a00":"#76b900",border:"none",borderRadius:7,color:"#000",fontWeight:800,fontSize:13,cursor:"pointer",transition:"background .2s"}}>
+            {copied?"✓  Copied!":"⎘  Copy Prompt"}
+          </button>
+        </div>
+      </div>
+      {/* Phase strip */}
+      <div style={{padding:"7px 20px",borderBottom:`1px solid ${C.border}`,background:phase.col+"0d",display:"flex",alignItems:"center",gap:14,flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:phase.col}}/>
+          <span style={{fontSize:11,color:phase.col,fontWeight:700}}>Phase {phase.id}: {phase.name}</span>
+        </div>
+        <span style={{fontSize:11,color:"#2a2a30"}}>·</span>
+        <span style={{fontSize:11,color:C.muted}}>{tabObj.hint}</span>
+        {week.ms&&<><span style={{fontSize:11,color:"#2a2a30"}}>·</span><span style={{fontSize:11,color:phase.col}}>★ {week.ms}</span></>}
+      </div>
+      {/* Prompt text */}
+      <div style={{flex:1,overflowY:"auto"}}>
+        <pre style={{margin:0,padding:"20px 24px",fontFamily:"'Courier New',Courier,monospace",fontSize:12.5,lineHeight:1.9,color:"#b8b4ac",whiteSpace:"pre-wrap",wordBreak:"break-word",background:"transparent"}}>
+          {prompt}
+        </pre>
+      </div>
+      {/* Bottom bar */}
+      <div style={{padding:"9px 20px",borderTop:`1px solid ${C.border}`,background:"#09090f",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:12}}>
+        <span style={{fontSize:11,color:C.muted}}>1. Copy &nbsp;·&nbsp; 2. Open claude.ai &nbsp;·&nbsp; 3. New chat &nbsp;·&nbsp; 4. Paste &amp; send</span>
+        <button onClick={copy} style={{padding:"6px 18px",background:copied?"#3d7a00":"#76b900",border:"none",borderRadius:6,color:"#000",fontWeight:700,fontSize:12,cursor:"pointer",transition:"background .2s",flexShrink:0}}>
+          {copied?"✓ Copied!":"⎘ Copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── CONTENT VIEW ─────────────────────────────────────────────────────────────
+function ContentView({ week, phase, done, onMarkDone }) {
+  const [tab, setTab] = useState("ov");
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{padding:"12px 20px",borderBottom:`1px solid ${C.border}`,background:"#09090f",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <div style={{background:phase.col,borderRadius:5,padding:"3px 10px",fontSize:10,fontWeight:700,color:"#fff",fontFamily:"monospace",flexShrink:0}}>P{phase.id} · W{week.w}</div>
+        <div style={{fontSize:15,fontWeight:700,color:"#f0ede6"}}>{week.t}</div>
+        {week.ms&&<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5}}><span style={{color:phase.col}}>★</span><span style={{fontSize:11,color:phase.col,fontWeight:700}}>{week.ms}</span></div>}
+      </div>
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0,background:"#08080e",overflowX:"auto"}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:"10px 18px",border:"none",background:"transparent",color:tab===t.id?"#f0ede6":"#555",fontWeight:tab===t.id?700:400,fontSize:12,cursor:"pointer",borderBottom:`2px solid ${tab===t.id?phase.col:"transparent"}`,whiteSpace:"nowrap",fontFamily:"inherit",transition:"color .15s"}}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+      <PromptPanel key={`${week.w}-${tab}`} week={week} phase={phase} tabObj={TABS.find(t=>t.id===tab)} isDone={done.has(week.w)} onMarkDone={()=>onMarkDone(week.w)}/>
+    </div>
+  );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [selW, setSelW] = useState(null);
+  const [expanded, setExpanded] = useState({1:true});
+  const { done, markDone } = useProgress();
+
+  return (
+    <div style={{display:"flex",height:"100vh",background:C.bg,color:"#ddd9d0",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",overflow:"hidden"}}>
+      <Sidebar selW={selW} done={done} onSelect={setSelW} expanded={expanded} setExpanded={setExpanded}/>
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {!selW?<Welcome/>:<ContentView key={selW.w} week={selW} phase={PHASES.find(p=>p.id===selW.p)} done={done} onMarkDone={markDone}/>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
