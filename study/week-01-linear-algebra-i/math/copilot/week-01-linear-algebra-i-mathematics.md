@@ -931,5 +931,151 @@ Compute their cosine similarity.
 
 ---
 
+## Appendix A: Symbol Reference — Pronunciation & Quick-Recall Guide
+
+Read each row out loud until it feels natural. The **"Say It"** column is how you'd speak the symbol in a sentence while studying or explaining to someone.
+
+### A.1 Greek Letters Used in This Document
+
+| Symbol | Name | Pronunciation | Say It | Where It Appears |
+|--------|------|---------------|--------|-------------------|
+| α | alpha | **AL-fuh** | "alpha" | Scalar variable |
+| β | beta | **BAY-tuh** (US) or **BEE-tuh** (UK) | "beta" | Scalar variable |
+| θ | theta | **THAY-tuh** | "theta" | Angle between vectors |
+| Σ | sigma (capital) | **SIG-muh** | "the sum of" or "sigma" | Summation notation |
+| π | pi | **PIE** | "pie" | π/3 = 60 degrees |
+
+### A.2 Vector & Scalar Notation
+
+| Symbol | Name | Pronunciation | Say It | Example |
+|--------|------|---------------|--------|---------|
+| **v** | bold v | — | "vector v" | **v** = (3, 4, 5) |
+| v⃗ | v with arrow | — | "vector v" | Same as **v** |
+| vᵢ | v sub i | — | "v sub i" or "the i-th component of v" | v₃ = 5 |
+| *c* | italic c | — | "scalar c" or just "c" | *c* **v** = scaling |
+| **û** | u hat | — | "u hat" or "unit vector u" | **û** = **v** / ‖**v**‖ |
+| **0** | bold zero | — | "the zero vector" | **v** + **0** = **v** |
+| −**v** | negative v | — | "negative v" or "the additive inverse of v" | **v** + (−**v**) = **0** |
+
+### A.3 Operations
+
+| Symbol | Name | Pronunciation | Say It | Example |
+|--------|------|---------------|--------|---------|
+| + | plus | **pluss** | "plus" or "added to" | **u** + **v** |
+| − | minus | **MY-nuss** | "minus" or "subtracted from" | **u** − **v** |
+| · | dot | **dot** | "dot" | **u** · **v** = "u dot v" |
+| × | times / cross | **times** | "times" or "multiplied by" | 3 × 4 (scalar context) |
+| Σᵢ | summation over i | **SIG-muh** | "the sum over i" or "sum from i equals..." | Σᵢ uᵢvᵢ |
+| √ | square root | **skwair root** | "the square root of" | √169 = 13 |
+| ² | squared | **skwaird** | "squared" | v₁² = "v-one squared" |
+| ⌈ ⌉ | ceiling | **SEE-ling** | "the ceiling of" | ⌈10000/256⌉ = 40 |
+
+### A.4 Norm, Projection & Similarity
+
+| Symbol | Name | Pronunciation | Say It | Meaning |
+|--------|------|---------------|--------|---------|
+| ‖**v**‖ | norm of v | **norm** | "the norm of v" or "the magnitude of v" | Length / magnitude |
+| ‖**v**‖² | norm squared | — | "norm of v squared" | Dot product of v with itself |
+| cos(θ) | cosine of theta | **CO-sign of THAY-tuh** | "cosine theta" or "cos theta" | Angle measure |
+| arccos | arc cosine | **ark-CO-sign** | "arc cosine" or "inverse cosine" | θ = arccos(1/2) |
+| proj_**v**(**u**) | projection of u onto v | **pruh-JEK-shun** | "the projection of u onto v" | Vector shadow |
+| comp_**v**(**u**) | scalar component | — | "the component of u along v" | Scalar shadow |
+| cos(θ) = **u**·**v** / (‖**u**‖·‖**v**‖) | cosine similarity | — | "cosine similarity of u and v" | Similarity score |
+
+### A.5 Set & Space Notation
+
+| Symbol | Name | Pronunciation | Say It | Meaning |
+|--------|------|---------------|--------|---------|
+| ∈ | element of | **element of** | "is an element of" or "belongs to" or "in" | **v** ∈ ℝⁿ |
+| ℝ | real numbers | **the reals** | "the real numbers" or "R" | The number line |
+| ℝⁿ | R-n | **R-n** | "R-n" or "real n-space" or "n-dimensional real space" | ℝ³ = 3D space |
+| ℝ³ | R-three | **R-three** | "R-three" or "real three-space" or "3D real space" | 3D vectors |
+| ℝ⁴⁰⁹⁶ | R-4096 | **R forty-ninety-six** | "R four-thousand-ninety-six" | Embedding dimension |
+| ∃ | there exists | **there exists** | "there exists" | ∃ **0** such that... |
+| ∀ | for all | **for all** | "for all" or "for every" | ∀ **v**, ∃ (−**v**) |
+| { } | set braces | **set** | "the set of" | span{**v₁**, **v₂**} |
+| F | field | **feeld** | "the field F" | Scalars come from F |
+| V | vector space | — | "the vector space V" | V over F |
+| span{...} | span | **span** | "the span of" | All linear combinations |
+| dim(V) | dimension | **dih-MEN-shun** | "the dimension of V" | Number of basis vectors |
+
+### A.6 Basis & Independence
+
+| Symbol | Name | Pronunciation | Say It | Meaning |
+|--------|------|---------------|--------|---------|
+| **e₁** | e-one | — | "e-one" or "the first standard basis vector" | (1, 0, 0) in ℝ³ |
+| **e₂** | e-two | — | "e-two" or "the second standard basis vector" | (0, 1, 0) in ℝ³ |
+| **e₃** | e-three | — | "e-three" or "the third standard basis vector" | (0, 0, 1) in ℝ³ |
+| c₁, c₂, ... | coefficients | **co-eh-FISH-ents** | "c-one, c-two, ..." or "the coefficients" | Scalars in linear combo |
+| c₁**v₁** + c₂**v₂** | linear combination | — | "c-one v-one plus c-two v-two" | Weighted sum of vectors |
+
+### A.7 Subscripts, Superscripts & Indexing
+
+| Symbol | Name | Pronunciation | Say It | Context |
+|--------|------|---------------|--------|---------|
+| vₙ | v sub n | — | "v sub n" or "v-n" | n-th component |
+| v₁² | v-one squared | — | "v-one squared" | Square of first component |
+| Σᵢ₌₁ⁿ | sum from i=1 to n | — | "the sum from i equals one to n" | Summation bounds |
+| log₂(n) | log base 2 of n | **log base two** | "log base two of n" | Reduction steps |
+
+### A.8 Proof & Logical Symbols
+
+| Symbol | Name | Pronunciation | Say It | Meaning |
+|--------|------|---------------|--------|---------|
+| ∎ | QED / tombstone | **Q-E-D** | "Q.E.D." or "end of proof" | Proof complete |
+| ✓ | check mark | — | "check" or "verified" | Verification passed |
+| → | implies / arrow | **implies** | "implies" or "therefore" or "gives us" | cos(θ)=0 → orthogonal |
+| = | equals | **ee-kwulz** | "equals" or "is equal to" | **u**·**v** = 0 |
+| ≈ | approximately | **uh-PROX-ih-mut-lee** | "approximately" or "is about" | ≈ 0.9923 |
+| ≤ | less than or equal | — | "is less than or equal to" | −1 ≤ cos(θ) ≤ 1 |
+| ≥ | greater than or equal | — | "is greater than or equal to" | ‖**v**‖ ≥ 0 |
+
+### A.9 CUDA / GPU Symbols
+
+| Symbol | Name | Pronunciation | Say It | Meaning |
+|--------|------|---------------|--------|---------|
+| `__global__` | global qualifier | **global** | "global" | Marks a CUDA kernel function |
+| `__shared__` | shared qualifier | **shared** | "shared" | Shared memory within a block |
+| `<<<...>>>` | launch config | **triple chevron** | "launched with" or "kernel launch" | Grid and block dimensions |
+| `blockIdx.x` | block index x | — | "block index dot x" | Which block this thread belongs to |
+| `threadIdx.x` | thread index x | — | "thread index dot x" | Thread's position within its block |
+| `blockDim.x` | block dimension x | — | "block dim dot x" or "threads per block" | Number of threads in one block |
+| `__syncthreads()` | sync threads | **sink threads** | "sync threads" | Barrier — all threads wait here |
+| `atomicAdd` | atomic add | **ah-TOM-ik add** | "atomic add" | Thread-safe addition |
+
+### A.10 Cheat Sheet — Full Expressions Read Aloud
+
+Practice reading these complete expressions as full sentences:
+
+| Expression | Read It As |
+|------------|------------|
+| **v** ∈ ℝ³ | "vector v is an element of R-three" |
+| ‖**v**‖ = √(**v** · **v**) | "the norm of v equals the square root of v dot v" |
+| **u** · **v** = ‖**u**‖ · ‖**v**‖ · cos(θ) | "u dot v equals the norm of u times the norm of v times cosine theta" |
+| **û** = **v** / ‖**v**‖ | "u-hat equals v divided by the norm of v" |
+| proj_**v**(**u**) = [(**u**·**v**) / (**v**·**v**)] · **v** | "the projection of u onto v equals u-dot-v over v-dot-v, times v" |
+| cos(θ) = (**u**·**v**) / (‖**u**‖·‖**v**‖) | "cosine theta equals u-dot-v over norm-u times norm-v" |
+| c₁**v₁** + c₂**v₂** + ... + cₖ**vₖ** = **0** | "c-one v-one plus c-two v-two plus dot-dot-dot plus c-k v-k equals the zero vector" |
+| Σᵢ uᵢvᵢ | "the sum over i of u-sub-i times v-sub-i" |
+| θ = arccos(1/2) = π/3 | "theta equals arc-cosine of one-half, which equals pi over three" |
+| gridSize = ⌈N / blockSize⌉ | "grid size equals the ceiling of N divided by block size" |
+
+### A.11 Memory Trick — Mnemonics
+
+- **Dot product = "Multiply and Collapse"** — multiply matching pairs, then add them all into one number.
+- **Norm = "Self-dot, then root"** — dot the vector with itself, take the square root.
+- **Unit vector = "Shrink to length 1"** — divide by the norm.
+- **Projection = "Shadow on a line"** — how much of **u** falls along **v**.
+- **Orthogonal = "Dot is zero"** — if **u**·**v** = 0, they make a 90° angle.
+- **Linearly dependent = "One is redundant"** — at least one vector is a combo of the others.
+- **Basis = "Independent + Spans everything"** — minimal set that builds the whole space.
+- **∈ = "lives in"** — **v** ∈ ℝ³ means "v lives in 3D real space."
+- **∀ = "for ALL" (upside-down A)** — flip the A upside down to remember.
+- **∃ = "there EXISTS" (backwards E)** — flip the E backward to remember.
+- **‖ ‖ = "double bars = distance"** — two bars on each side, like measuring between two walls.
+- **Σ = "big S for Sum"** — the capital sigma is just a fancy S.
+
+---
+
 *Assad's 52-Week NVIDIA Curriculum · Week 1: Linear Algebra I · Phase 1: Math & Systems*
 *Saved: mathematics | File: week-01-linear-algebra-i-mathematics.md*
